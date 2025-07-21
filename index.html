@@ -2,114 +2,159 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Money Tracker (VND)</title>
   <style>
     body {
-      font-family: Arial;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #e9f0f5;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .container {
+      background-color: #ffffff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 500px;
+    }
+    h1 {
+      color: #2c3e50;
       text-align: center;
-      margin-top: 50px;
     }
     input, button {
-      margin: 5px;
-      padding: 8px;
-      font-size: 16px;
+      padding: 10px;
+      margin: 5px 0;
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-sizing: border-box;
     }
-    #transactions {
+    button {
+      cursor: pointer;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    .entry {
+      background: #f9f9f9;
+      padding: 10px;
+      border-left: 5px solid;
+      margin-bottom: 5px;
+      border-radius: 5px;
+      font-size: 0.95em;
+    }
+    .plus {
+      border-color: #2ecc71;
+    }
+    .minus {
+      border-color: #e74c3c;
+    }
+    #history {
       margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #balance {
+      font-size: 1.5em;
+      color: #27ae60;
+      text-align: center;
+      margin-top: 10px;
     }
   </style>
 </head>
 <body>
-  <h1>Money Tracker (VND)</h1>
-  <div>
-    <input id="amount" type="number" placeholder="Enter amount" />
-    <button onclick="addTransaction('add')">+ Add</button>
-    <button onclick="addTransaction('subtract')">- Subtract</button>
-    <button onclick="exportToTxt()">Export .txt</button>
-    <button onclick="clearAll()">Clear All</button>
+  <div class="container">
+    <h1>Money Tracker (VND)</h1>
+
+    <input type="number" id="amount" placeholder="Amount in VND">
+    <input type="text" id="description" placeholder="Description">
+    <button onclick="addTransaction(true)">+ Add</button>
+    <button onclick="addTransaction(false)">- Subtract</button>
+    <button onclick="exportToTxt()">Export to .txt</button>
+    <button onclick="clearAll()" style="background-color:#e74c3c;">Clear All</button>
+
+    <div id="balance">Balance: 0 ₫</div>
+    <div id="history"></div>
   </div>
-  <h2 id="balance">Balance: 0₫</h2>
-  <ul id="transactions"></ul>
 
-  <!-- Firebase SDK -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getDatabase, ref, push, onValue, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  <script>
+    let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDYt64cV0SP29xhhaVa7Ja_fOjrVKy6Qb4",
-      authDomain: "money-tracker-889a6.firebaseapp.com",
-      projectId: "money-tracker-889a6",
-      storageBucket: "money-tracker-889a6.appspot.com",
-      messagingSenderId: "1084776143786",
-      appId: "1:1084776143786:web:385c1793e6a83836d6e9d3",
-      databaseURL: "https://money-tracker-889a6-default-rtdb.asia-southeast1.firebasedatabase.app"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const transactionsRef = ref(db, 'transactions');
-
-    const amountInput = document.getElementById("amount");
-    const balanceDisplay = document.getElementById("balance");
-    const transactionsList = document.getElementById("transactions");
-
-    let balance = 0;
-
-    function renderTransactions(data) {
-      transactionsList.innerHTML = "";
-      balance = 0;
-
-      for (const id in data) {
-        const tx = data[id];
-        const li = document.createElement("li");
-        li.textContent = `${tx.type === 'add' ? '+' : '-'} ${tx.amount}₫ (${tx.time})`;
-        transactionsList.appendChild(li);
-
-        if (tx.type === 'add') {
-          balance += tx.amount;
-        } else {
-          balance -= tx.amount;
-        }
-      }
-
-      balanceDisplay.textContent = `Balance: ${balance.toLocaleString()}₫`;
+    function saveAndRender() {
+      localStorage.setItem('transactions', JSON.stringify(transactions));
+      renderTransactions();
     }
 
-    onValue(transactionsRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      renderTransactions(data);
-    });
-
-    window.addTransaction = function (type) {
+    function addTransaction(isPlus) {
+      const amountInput = document.getElementById('amount');
+      const descriptionInput = document.getElementById('description');
       const amount = parseInt(amountInput.value);
-      if (isNaN(amount) || amount <= 0) return;
-      const now = new Date();
-      const timestamp = now.toLocaleString();
+      const description = descriptionInput.value;
+      if (isNaN(amount) || description === '') return;
 
-      push(transactionsRef, {
-        amount,
-        type,
-        time: timestamp
+      const now = new Date();
+      const datetime = now.toLocaleDateString('vi-VN') + ' ' + now.toLocaleTimeString('vi-VN');
+
+      transactions.push({
+        amount: isPlus ? amount : -amount,
+        description: description,
+        date: datetime
       });
 
-      amountInput.value = "";
-    };
+      amountInput.value = '';
+      descriptionInput.value = '';
+      saveAndRender();
+    }
 
-    window.exportToTxt = function () {
-      const list = Array.from(transactionsList.children).map(li => li.textContent).join("\n");
-      const blob = new Blob([list], { type: "text/plain" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "transactions.txt";
-      a.click();
-    };
+    function renderTransactions() {
+      const historyDiv = document.getElementById('history');
+      historyDiv.innerHTML = '';
+      let balance = 0;
 
-    window.clearAll = function () {
-      if (confirm("Clear all data?")) {
-        set(transactionsRef, null);
+      transactions.slice().reverse().forEach(t => {
+        balance += t.amount;
+        const div = document.createElement('div');
+        div.className = 'entry ' + (t.amount >= 0 ? 'plus' : 'minus');
+        div.textContent = `${t.date} | ${t.description}: ${t.amount.toLocaleString('vi-VN')} ₫`;
+        historyDiv.appendChild(div);
+      });
+
+      document.getElementById('balance').textContent = `Balance: ${balance.toLocaleString('vi-VN')} ₫`;
+    }
+
+    function exportToTxt() {
+      let text = 'Money Tracker History (VND)\n\n';
+      let total = 0;
+      transactions.forEach(t => {
+        total += t.amount;
+        text += `${t.date} | ${t.description}: ${t.amount.toLocaleString('vi-VN')} ₫\n`;
+      });
+      text += `\nTotal Balance: ${total.toLocaleString('vi-VN')} ₫`;
+      const blob = new Blob([text], { type: 'text/plain' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'money_tracker.txt';
+      link.click();
+    }
+
+    function clearAll() {
+      if (confirm('Are you sure you want to clear all transactions?')) {
+        transactions = [];
+        saveAndRender();
       }
-    };
+    }
+
+    renderTransactions();
   </script>
 </body>
 </html>
