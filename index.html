@@ -1,48 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Money Tracker</title>
+  <meta charset="UTF-8">
+  <title>Money Tracker (VND)</title>
   <style>
     body {
       font-family: Arial;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-top: 40px;
-    }
-    h1 {
-      color: #333;
+      text-align: center;
+      margin-top: 50px;
     }
     input, button {
       margin: 5px;
       padding: 8px;
-      font-size: 1rem;
+      font-size: 16px;
     }
-    .entry {
-      margin: 5px 0;
+    #transactions {
+      margin-top: 20px;
     }
-    .positive { color: green; }
-    .negative { color: red; }
   </style>
 </head>
 <body>
   <h1>Money Tracker (VND)</h1>
   <div>
-    <input type="number" id="amount" placeholder="Amount (VND)">
-    <input type="text" id="note" placeholder="Note">
-    <button onclick="addTransaction(true)">+ Add</button>
-    <button onclick="addTransaction(false)">− Subtract</button>
-    <button onclick="clearAll()" style="background-color:red;color:white">Clear All</button>
+    <input id="amount" type="number" placeholder="Enter amount" />
+    <button onclick="addTransaction('add')">+ Add</button>
+    <button onclick="addTransaction('subtract')">- Subtract</button>
+    <button onclick="exportToTxt()">Export .txt</button>
+    <button onclick="clearAll()">Clear All</button>
   </div>
-  <h2 id="balance">Balance: 0 VND</h2>
-  <div id="history"></div>
+  <h2 id="balance">Balance: 0₫</h2>
+  <ul id="transactions"></ul>
 
   <!-- Firebase SDK -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, push, onValue, remove, set } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDYt64cV0SP29xhhaVa7Ja_fOjrVKy6Qb4",
@@ -51,66 +43,73 @@
       storageBucket: "money-tracker-889a6.appspot.com",
       messagingSenderId: "1084776143786",
       appId: "1:1084776143786:web:385c1793e6a83836d6e9d3",
-      measurementId: "G-10HV9F6MF2"
+      databaseURL: "https://money-tracker-889a6-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
 
     const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const transRef = collection(db, "transactions");
+    const db = getDatabase(app);
+    const transactionsRef = ref(db, 'transactions');
 
-    const historyEl = document.getElementById("history");
-    const balanceEl = document.getElementById("balance");
+    const amountInput = document.getElementById("amount");
+    const balanceDisplay = document.getElementById("balance");
+    const transactionsList = document.getElementById("transactions");
 
     let balance = 0;
 
-    function formatVND(value) {
-      return value.toLocaleString('vi-VN') + " VND";
-    }
-
-    function renderTransactions(transactions) {
-      historyEl.innerHTML = "";
+    function renderTransactions(data) {
+      transactionsList.innerHTML = "";
       balance = 0;
-      transactions.forEach(docSnap => {
-        const data = docSnap.data();
-        const div = document.createElement("div");
-        div.className = "entry " + (data.amount > 0 ? "positive" : "negative");
-        div.textContent = `${data.time} | ${data.note}: ${formatVND(data.amount)}`;
-        historyEl.appendChild(div);
-        balance += data.amount;
-      });
-      balanceEl.textContent = "Balance: " + formatVND(balance);
+
+      for (const id in data) {
+        const tx = data[id];
+        const li = document.createElement("li");
+        li.textContent = `${tx.type === 'add' ? '+' : '-'} ${tx.amount}₫ (${tx.time})`;
+        transactionsList.appendChild(li);
+
+        if (tx.type === 'add') {
+          balance += tx.amount;
+        } else {
+          balance -= tx.amount;
+        }
+      }
+
+      balanceDisplay.textContent = `Balance: ${balance.toLocaleString()}₫`;
     }
 
-    // Listen to changes live
-    onSnapshot(transRef, (snapshot) => {
-      renderTransactions(snapshot.docs);
+    onValue(transactionsRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      renderTransactions(data);
     });
 
-    async function addTransaction(isPlus) {
-      const amountEl = document.getElementById("amount");
-      const noteEl = document.getElementById("note");
-      const value = parseInt(amountEl.value);
-      const note = noteEl.value || "(no note)";
-      if (isNaN(value) || value === 0) return;
+    window.addTransaction = function (type) {
+      const amount = parseInt(amountInput.value);
+      if (isNaN(amount) || amount <= 0) return;
+      const now = new Date();
+      const timestamp = now.toLocaleString();
 
-      const now = new Date().toLocaleString();
-      await addDoc(transRef, {
-        amount: isPlus ? value : -value,
-        note,
-        time: now
+      push(transactionsRef, {
+        amount,
+        type,
+        time: timestamp
       });
 
-      amountEl.value = "";
-      noteEl.value = "";
-    }
+      amountInput.value = "";
+    };
 
-    async function clearAll() {
-      if (!confirm("Are you sure you want to delete all transactions?")) return;
-      const snapshot = await getDocs(transRef);
-      snapshot.forEach(docSnap => {
-        deleteDoc(doc(db, "transactions", docSnap.id));
-      });
-    }
+    window.exportToTxt = function () {
+      const list = Array.from(transactionsList.children).map(li => li.textContent).join("\n");
+      const blob = new Blob([list], { type: "text/plain" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "transactions.txt";
+      a.click();
+    };
+
+    window.clearAll = function () {
+      if (confirm("Clear all data?")) {
+        set(transactionsRef, null);
+      }
+    };
   </script>
 </body>
 </html>
